@@ -21,7 +21,7 @@ Please use responsibly and only on networks you own or have permission to test.
 
 ---
 
-## íº€ Installation
+## ğŸš€ Installation
 
 Clone this repository:
 ```bash
@@ -34,3 +34,14 @@ cd wifite2-gui
 ```bash
 python wifite_gui.py
 ```
+
+## ğŸ“¦ Requirements
+
+Python 3.x
+Linux (recommended)
+[Wifite2](https://github.com/derv82/wifite2) installed and working
+
+## ğŸ“ Notes
+
+This project is still under active testing and development.
+Contributions, feedback, and bug reports are welcome!
