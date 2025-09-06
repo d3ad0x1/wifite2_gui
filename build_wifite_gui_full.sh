@@ -1,69 +1,105 @@
-#!/bin/bash
+#!/usr/bin/env sh
+# install_tk_deps.sh — installs Python3 + Tkinter (and pip) on common Linux distros
 
-# Run: sudo bash build_wifite_gui_full.sh
+set -eu
 
-# Root check
-if [ "$EUID" -ne 0 ]; then
-  echo "Please run the script with sudo"
-  exit
-fi
+SUDO=""
+[ "$(id -u)" -ne 0 ] && SUDO="sudo"
 
-echo "=== Wifite2 GUI Builder (fork d3ad0x1) ==="
+info() { printf "\033[1;34m[INFO]\033[0m %s\n" "$*"; }
+err()  { printf "\033[1;31m[ERR]\033[0m  %s\n" "$*" 1>&2; }
 
-# Determine the user to ensure correct paths
-USERNAME=$(logname)
+have() { command -v "$1" >/dev/null 2>&1; }
 
-# Project directory
-PROJECT_DIR="/home/$USERNAME/wifite_gui"
-mkdir -p "$PROJECT_DIR"
+install_apt() {
+  $SUDO apt-get update
+  DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y python3 python3-tk python3-pip
+}
 
-# Install system dependencies
-echo "Installing system dependencies..."
-apt update
-apt install -y python3 python3-tk python3-pip git iw net-tools wifite
+install_dnf_yum() {
+  if have dnf; then
+    $SUDO dnf install -y python3 python3-tkinter python3-pip
+  else
+    $SUDO yum install -y python3 python3-tkinter python3-pip
+  fi
+}
 
-# Clone or update the d3ad0x1 fork
-echo "Downloading the d3ad0x1 Wifite2 fork..."
-cd "$PROJECT_DIR"
-if [ -d "wifite2" ]; then
-    echo "Wifite2 already exists, updating..."
-    cd wifite2
-    git pull
-else
-    git clone https://github.com/d3ad0x1/wifite2.git
-fi
+install_pacman() {
+  $SUDO pacman -Sy --noconfirm python tk python-pip
+}
 
-# Copy the local GUI script from the repository
-REPO_DIR="$(pwd)/../"  # It is assumed that the script is located in the repository root
-if [ -f "$REPO_DIR/wifite_gui.py" ]; then
-    cp "$REPO_DIR/wifite_gui.py" "$PROJECT_DIR/wifite_gui.py"
-    echo "GUI script copied to $PROJECT_DIR/wifite_gui.py"
-else
-    echo "Error: wifite_gui.py not found in the repository root"
+install_zypper() {
+  $SUDO zypper --non-interactive refresh
+  $SUDO zypper --non-interactive install python3 python3-tk python3-pip
+}
+
+install_apk() {
+  # try native tkinter package first; fall back to tcl/tk pair
+  $SUDO apk add --no-cache python3 py3-pip py3-tkinter 2>/dev/null || \
+  $SUDO apk add --no-cache python3 py3-pip tcl tk
+}
+
+install_xbps() {
+  $SUDO xbps-install -Sy python3 python3-pip python3-tkinter 2>/dev/null || \
+  $SUDO xbps-install -Sy python3 python3-pip tk
+}
+
+detect_and_install() {
+  if [ -f /etc/os-release ]; then
+    . /etc/os-release
+    ID_LIKE_LO=$(printf "%s" "${ID_LIKE:-}" | tr '[:upper:]' '[:lower:]')
+    ID_LO=$(printf "%s" "${ID:-}" | tr '[:upper:]' '[:lower:]')
+  else
+    ID_LIKE_LO=""; ID_LO=""
+  fi
+
+  case "$ID_LO:$ID_LIKE_LO" in
+    *debian*:*|*:*debian*|*ubuntu*:*|*:*ubuntu*|*linuxmint*:*|*pop*:*|*elementary*:* )
+      info "Detected Debian/Ubuntu family"; install_apt ;;
+    *fedora*:*|*rhel*:*|*centos*:*|*rocky*:*|*almalinux*:*|*:*rhel*|*:*fedora* )
+      info "Detected RHEL/Fedora family"; install_dnf_yum ;;
+    *arch*:*|*manjaro*:*|*:*arch* )
+      info "Detected Arch/Manjaro"; install_pacman ;;
+    *opensuse*:*|*suse*:*|*:*suse* )
+      info "Detected openSUSE"; install_zypper ;;
+    *alpine*:*|*:*alpine* )
+      info "Detected Alpine"; install_apk ;;
+    *void*:*|*:*void* )
+      info "Detected Void Linux"; install_xbps ;;
+    * )
+      if have apt-get; then info "Using apt-get (heuristic)"; install_apt
+      elif have dnf || have yum; then info "Using dnf/yum (heuristic)"; install_dnf_yum
+      elif have pacman; then info "Using pacman (heuristic)"; install_pacman
+      elif have zypper; then info "Using zypper (heuristic)"; install_zypper
+      elif have apk; then info "Using apk (heuristic)"; install_apk
+      elif have xbps-install; then info "Using xbps (heuristic)"; install_xbps
+      else
+        err "Unsupported distro: install Python 3 + Tkinter manually."
+        exit 1
+      fi
+      ;;
+  esac
+}
+
+verify() {
+  info "Verifying tkinter import…"
+  if python3 - <<'PY'
+import sys
+try:
+    import tkinter as tk
+    from tkinter import ttk, messagebox
+    import subprocess, threading, re
+except Exception as e:
+    print("FAIL:", e); sys.exit(1)
+print("OK: tkinter is available.")
+PY
+  then
+    info "All set. You can run your Tk app."
+  else
+    err "tkinter import failed. If this is a headless server, ensure an X server (or Xvfb) is available."
     exit 1
-fi
+  fi
+}
 
-# Create a .desktop file for the applications menu
-DESKTOP_FILE="/home/$USERNAME/.local/share/applications/wifite_gui.desktop"
-mkdir -p "$(dirname $DESKTOP_FILE)"
-cat > "$DESKTOP_FILE" <<EOF
-[Desktop Entry]
-Name=Wifite2 GUI
-Comment=Graphical interface for Wifite2 (d3ad0x1 fork)
-Exec=sudo python3 $PROJECT_DIR/wifite_gui.py
-Icon=network-wireless
-Terminal=true
-Type=Application
-Categories=Network;Security;
-StartupNotify=true
-EOF
-
-update-desktop-database "/home/$USERNAME/.local/share/applications"
-
-echo "=== Installation completed ==="
-echo "Project location: $PROJECT_DIR"
-echo "GUI script: $PROJECT_DIR/wifite_gui.py"
-echo "Run the GUI:"
-echo "sudo python3 $PROJECT_DIR/wifite_gui.py"
-echo "Or via the Applications menu (Wifite2 GUI)"
-echo "Done! Enjoy the GUI for Wifite2 (d3ad0x1 fork)."
+detect_and_install
+verify
