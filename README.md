@@ -32,8 +32,8 @@ cd wifite2-gui
 ## Run the script:
 
 ```bash
-chmod +x install_tk_deps.sh
-./install_tk_deps.sh
+chmod +x build_wifite_gui_full.sh
+./build_wifite_gui_full.sh
 python wifite_gui.py
 ```
 
