@@ -47,3 +47,5 @@ Linux (recommended)
 
 This project is still under active testing and development.
 Contributions, feedback, and bug reports are welcome!
+
+---
